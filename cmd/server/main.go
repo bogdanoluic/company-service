@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/bogdanoluic/company-service/internal/api"
 	"github.com/bogdanoluic/company-service/internal/config"
@@ -44,16 +48,61 @@ func run() error {
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
+	signalCtx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	serverErr := make(chan error, 1)
+
 	appLogger.Info(
 		"starting HTTP server",
 		"address", addr,
-		"configured_log_level", cfg.Log.Level, // debug or info :)
+		"configured_log_level", cfg.Log.Level,
 	)
 
-	if err := server.ListenAndServe(); err != nil &&
-		!errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("serve HTTP: %w", err)
+	go func() {
+		err := server.ListenAndServe()
+
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- fmt.Errorf("serve HTTP: %w", err)
+			return
+		}
+
+		serverErr <- nil
+	}()
+
+	select {
+	case err := <-serverErr:
+		// Server is already finished.
+		return err
+
+	case <-signalCtx.Done():
+		// Server is still running.
+		// Restore the default signal behaviour.
+		// A second Ctrl+C can forcefully terminate the application.
+		stop()
+
+		appLogger.Info("shutdown signal received")
 	}
+
+	shutdownCtx, cancel := context.WithTimeout(
+		context.Background(),
+		10*time.Second,
+	)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("shutdown HTTP server: %w", err)
+	}
+
+	if err := <-serverErr; err != nil {
+		return err
+	}
+
+	appLogger.Info("HTTP server stopped gracefully")
 
 	return nil
 }
