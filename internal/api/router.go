@@ -1,18 +1,27 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func NewRouter() http.Handler {
-	r := chi.NewRouter()
+func NewRouter(logger *slog.Logger) chi.Router {
+	router := chi.NewRouter()
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		logger.Debug("health check requested")
+
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
+
+		if _, err := w.Write([]byte("OK")); err != nil {
+			logger.Error(
+				"write health response",
+				"error", err,
+			)
+		}
 	})
 
-	return r
+	return router
 }
