@@ -45,3 +45,6 @@ fmt:
 
 clean:
 	rm -rf bin
+
+test-integration:
+	go test -tags=integration ./internal/storage/postgres -count=1
