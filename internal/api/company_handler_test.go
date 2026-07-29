@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/bogdanoluic/company-service/internal/company"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -448,6 +449,329 @@ func TestCompanyHandlerCreate(t *testing.T) {
 		}
 	})
 }
+func TestCompanyHandlerGetByID(t *testing.T) {
+	t.Run("returns company", func(t *testing.T) {
+		id := uuid.New()
+
+		want := company.Company{
+			ID:                id,
+			Name:              "Acme",
+			AmountOfEmployees: 10,
+			Registered:        true,
+			Type:              company.TypeCorporations,
+		}
+
+		service := &fakeCompanyService{
+			getByIDFn: func(
+				_ context.Context,
+				gotID uuid.UUID,
+			) (company.Company, error) {
+				if gotID != id {
+					t.Errorf("ID = %s, want %s", gotID, id)
+				}
+
+				return want, nil
+			},
+		}
+
+		handler := newTestCompanyHandler(service)
+
+		request := httptest.NewRequest(
+			http.MethodGet,
+			"/companies/"+id.String(),
+			nil,
+		)
+
+		routeContext := chi.NewRouteContext()
+		routeContext.URLParams.Add("id", id.String())
+
+		request = request.WithContext(
+			context.WithValue(
+				request.Context(),
+				chi.RouteCtxKey,
+				routeContext,
+			),
+		)
+
+		recorder := httptest.NewRecorder()
+
+		handler.GetByID(recorder, request)
+
+		if recorder.Code != http.StatusOK {
+			t.Fatalf(
+				"status = %d, want %d",
+				recorder.Code,
+				http.StatusOK,
+			)
+		}
+
+		var response companyResponse
+
+		if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+
+		if response.ID != id {
+			t.Errorf("ID = %s, want %s", response.ID, id)
+		}
+	})
+
+	t.Run("rejects invalid ID", func(t *testing.T) {
+		handler := newTestCompanyHandler(&fakeCompanyService{})
+
+		request := requestWithCompanyID(
+			http.MethodGet,
+			"/companies/not-a-uuid",
+			"not-a-uuid",
+			nil,
+		)
+		recorder := httptest.NewRecorder()
+
+		handler.GetByID(recorder, request)
+
+		assertErrorResponse(
+			t,
+			recorder,
+			http.StatusBadRequest,
+			"invalid company ID",
+			"id",
+		)
+	})
+
+	t.Run("returns not found", func(t *testing.T) {
+		id := uuid.New()
+
+		service := &fakeCompanyService{
+			getByIDFn: func(
+				context.Context,
+				uuid.UUID,
+			) (company.Company, error) {
+				return company.Company{}, company.ErrNotFound
+			},
+		}
+
+		handler := newTestCompanyHandler(service)
+
+		request := requestWithCompanyID(
+			http.MethodGet,
+			"/companies/"+id.String(),
+			id.String(),
+			nil,
+		)
+		recorder := httptest.NewRecorder()
+
+		handler.GetByID(recorder, request)
+
+		assertErrorResponse(
+			t,
+			recorder,
+			http.StatusNotFound,
+			"company not found",
+			"",
+		)
+	})
+}
+
+func TestCompanyHandlerPatch(t *testing.T) {
+	t.Run("patches provided fields", func(t *testing.T) {
+		id := uuid.New()
+
+		service := &fakeCompanyService{
+			patchFn: func(
+				_ context.Context,
+				gotID uuid.UUID,
+				input company.PatchInput,
+			) (company.Company, error) {
+				if gotID != id {
+					t.Errorf("ID = %s, want %s", gotID, id)
+				}
+
+				if input.Name.Set {
+					t.Error("Name.Set = true, want false")
+				}
+
+				if !input.Description.Set {
+					t.Error("Description.Set = false, want true")
+				}
+
+				if input.Description.Value != nil {
+					t.Error("Description.Value != nil, want nil")
+				}
+
+				if !input.AmountOfEmployees.Set {
+					t.Error(
+						"AmountOfEmployees.Set = false, want true",
+					)
+				}
+
+				if input.AmountOfEmployees.Value != 0 {
+					t.Errorf(
+						"AmountOfEmployees.Value = %d, want 0",
+						input.AmountOfEmployees.Value,
+					)
+				}
+
+				if !input.Registered.Set {
+					t.Error("Registered.Set = false, want true")
+				}
+
+				if input.Registered.Value {
+					t.Error("Registered.Value = true, want false")
+				}
+
+				return company.Company{
+					ID:                id,
+					Name:              "Acme",
+					Description:       nil,
+					AmountOfEmployees: 0,
+					Registered:        false,
+					Type:              company.TypeCorporations,
+				}, nil
+			},
+		}
+
+		handler := newTestCompanyHandler(service)
+
+		request := requestWithCompanyID(
+			http.MethodPatch,
+			"/companies/"+id.String(),
+			id.String(),
+			strings.NewReader(`{
+				"description": null,
+				"amount_of_employees": 0,
+				"registered": false
+			}`),
+		)
+		recorder := httptest.NewRecorder()
+
+		handler.Patch(recorder, request)
+
+		if recorder.Code != http.StatusOK {
+			t.Fatalf(
+				"status = %d, want %d; body = %s",
+				recorder.Code,
+				http.StatusOK,
+				recorder.Body.String(),
+			)
+		}
+	})
+
+	t.Run("maps empty patch validation error", func(t *testing.T) {
+		id := uuid.New()
+
+		service := &fakeCompanyService{
+			patchFn: func(
+				context.Context,
+				uuid.UUID,
+				company.PatchInput,
+			) (company.Company, error) {
+				return company.Company{}, &company.ValidationError{
+					Field:   "body",
+					Message: "at least one field must be provided",
+				}
+			},
+		}
+
+		handler := newTestCompanyHandler(service)
+
+		request := requestWithCompanyID(
+			http.MethodPatch,
+			"/companies/"+id.String(),
+			id.String(),
+			strings.NewReader(`{}`),
+		)
+		recorder := httptest.NewRecorder()
+
+		handler.Patch(recorder, request)
+
+		assertErrorResponse(
+			t,
+			recorder,
+			http.StatusBadRequest,
+			"at least one field must be provided",
+			"body",
+		)
+	})
+}
+
+func TestCompanyHandlerDelete(t *testing.T) {
+	t.Run("deletes company", func(t *testing.T) {
+		id := uuid.New()
+
+		service := &fakeCompanyService{
+			deleteFn: func(
+				_ context.Context,
+				gotID uuid.UUID,
+			) error {
+				if gotID != id {
+					t.Errorf("ID = %s, want %s", gotID, id)
+				}
+
+				return nil
+			},
+		}
+
+		handler := newTestCompanyHandler(service)
+
+		request := requestWithCompanyID(
+			http.MethodDelete,
+			"/companies/"+id.String(),
+			id.String(),
+			nil,
+		)
+		recorder := httptest.NewRecorder()
+
+		handler.Delete(recorder, request)
+
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf(
+				"status = %d, want %d",
+				recorder.Code,
+				http.StatusNoContent,
+			)
+		}
+
+		if recorder.Body.Len() != 0 {
+			t.Errorf(
+				"body = %q, want empty body",
+				recorder.Body.String(),
+			)
+		}
+	})
+
+	t.Run("returns not found", func(t *testing.T) {
+		id := uuid.New()
+
+		service := &fakeCompanyService{
+			deleteFn: func(
+				context.Context,
+				uuid.UUID,
+			) error {
+				return company.ErrNotFound
+			},
+		}
+
+		handler := newTestCompanyHandler(service)
+
+		request := requestWithCompanyID(
+			http.MethodDelete,
+			"/companies/"+id.String(),
+			id.String(),
+			nil,
+		)
+		recorder := httptest.NewRecorder()
+
+		handler.Delete(recorder, request)
+
+		assertErrorResponse(
+			t,
+			recorder,
+			http.StatusNotFound,
+			"company not found",
+			"",
+		)
+	})
+}
 
 func newTestCompanyHandler(
 	service CompanyService,
@@ -498,4 +822,24 @@ func assertErrorResponse(
 			wantField,
 		)
 	}
+}
+
+func requestWithCompanyID(
+	method string,
+	target string,
+	id string,
+	body io.Reader,
+) *http.Request {
+	request := httptest.NewRequest(method, target, body)
+
+	routeContext := chi.NewRouteContext()
+	routeContext.URLParams.Add("id", id)
+
+	return request.WithContext(
+		context.WithValue(
+			request.Context(),
+			chi.RouteCtxKey,
+			routeContext,
+		),
+	)
 }

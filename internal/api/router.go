@@ -27,6 +27,9 @@ func NewRouter(
 	})
 
 	router.Post("/companies", companyHandler.Create)
+	router.Get("/companies/{id}", companyHandler.GetByID)
+	router.Patch("/companies/{id}", companyHandler.Patch)
+	router.Delete("/companies/{id}", companyHandler.Delete)
 
 	return router
 }
