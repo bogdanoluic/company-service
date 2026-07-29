@@ -78,6 +78,7 @@ func TestServiceCreate(t *testing.T) {
 			AmountOfEmployees: 25,
 			Registered:        true,
 			Type:              TypeCorporations,
+			Version:           1,
 		}
 
 		var repositoryInput Company
@@ -300,20 +301,32 @@ func TestServicePatch(t *testing.T) {
 		existing.Description = &description
 		existing.AmountOfEmployees = 25
 		existing.Registered = true
+		existing.Version = 1
 
-		want := existing
-		want.Description = nil
-		want.AmountOfEmployees = 0
-		want.Registered = false
-		want.Type = TypeNonProfit
+		wantRepositoryUpdate := existing
+		wantRepositoryUpdate.Description = nil
+		wantRepositoryUpdate.AmountOfEmployees = 0
+		wantRepositoryUpdate.Registered = false
+		wantRepositoryUpdate.Type = TypeNonProfit
+
+		wantResult := wantRepositoryUpdate
+		wantResult.Version = 2
 
 		var repositoryUpdate Company
 
 		repository := &fakeRepository{
 			getByIDFn: func(
-				context.Context,
-				uuid.UUID,
+				_ context.Context,
+				gotID uuid.UUID,
 			) (Company, error) {
+				if gotID != id {
+					t.Errorf(
+						"GetByID() ID = %s, want %s",
+						gotID,
+						id,
+					)
+				}
+
 				return existing, nil
 			},
 			updateFn: func(
@@ -353,15 +366,19 @@ func TestServicePatch(t *testing.T) {
 			t.Fatalf("Patch() error = %v", err)
 		}
 
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("Patch() = %+v, want %+v", got, want)
-		}
-
-		if !reflect.DeepEqual(repositoryUpdate, want) {
+		if !reflect.DeepEqual(repositoryUpdate, wantRepositoryUpdate) {
 			t.Errorf(
 				"repository Update() input = %+v, want %+v",
 				repositoryUpdate,
-				want,
+				wantRepositoryUpdate,
+			)
+		}
+
+		if !reflect.DeepEqual(got, wantResult) {
+			t.Errorf(
+				"Patch() = %+v, want %+v",
+				got,
+				wantResult,
 			)
 		}
 	})
@@ -593,5 +610,6 @@ func testServiceCompany(id uuid.UUID, name string) Company {
 		AmountOfEmployees: 10,
 		Registered:        false,
 		Type:              TypeCorporations,
+		Version:           1,
 	}
 }

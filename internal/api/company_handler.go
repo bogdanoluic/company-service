@@ -314,6 +314,15 @@ func (h *CompanyHandler) respondCompanyError(
 			"",
 		)
 
+	case errors.Is(err, company.ErrConflict):
+		h.respondError(
+			w,
+			r,
+			http.StatusConflict,
+			"company was modified; retry the request",
+			"",
+		)
+
 	default:
 		h.logger.Error(
 			"company request failed",

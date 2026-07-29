@@ -114,18 +114,18 @@ func TestCompanyRepository(t *testing.T) {
 		}
 
 		description := "Updated description"
-		updated := company.Company{
-			ID:                original.ID,
-			Name:              "Trading.com",
-			Description:       &description,
-			AmountOfEmployees: 100,
-			Registered:        true,
-			Type:              company.TypeCooperative,
-		}
+		updated := original
+		updated.Name = "Trading.com"
+		updated.Description = &description
+		updated.AmountOfEmployees = 100
+		updated.Registered = true
+		updated.Type = company.TypeCooperative
 
 		if err := repository.Update(ctx, updated); err != nil {
 			t.Fatalf("Update() error = %v", err)
 		}
+
+		updated.Version++
 
 		got, err := repository.GetByID(ctx, original.ID)
 		if err != nil {
@@ -185,6 +185,62 @@ func TestCompanyRepository(t *testing.T) {
 			)
 		}
 	})
+
+	t.Run("rejects stale update", func(t *testing.T) {
+		clearCompanies(t, ctx, repository)
+		c := testCompany("XM")
+
+		if err := repository.Create(ctx, c); err != nil {
+			t.Fatalf("Create() error = %v", err)
+		}
+
+		firstCopy, err := repository.GetByID(ctx, c.ID)
+		if err != nil {
+			t.Fatalf("first GetByID() error = %v", err)
+		}
+
+		staleCopy, err := repository.GetByID(ctx, c.ID)
+		if err != nil {
+			t.Fatalf("second GetByID() error = %v", err)
+		}
+
+		firstCopy.Name = "First Update"
+
+		if err := repository.Update(ctx, firstCopy); err != nil {
+			t.Fatalf("first Update() error = %v", err)
+		}
+
+		staleCopy.Name = "Stale Update"
+
+		err = repository.Update(ctx, staleCopy)
+		if !errors.Is(err, company.ErrConflict) {
+			t.Fatalf(
+				"second Update() error = %v, want %v",
+				err,
+				company.ErrConflict,
+			)
+		}
+
+		stored, err := repository.GetByID(ctx, c.ID)
+		if err != nil {
+			t.Fatalf("final GetByID() error = %v", err)
+		}
+
+		if stored.Name != "First Update" {
+			t.Errorf(
+				"stored name = %q, want %q",
+				stored.Name,
+				"First Update",
+			)
+		}
+
+		if stored.Version != 2 {
+			t.Errorf(
+				"stored version = %d, want 2",
+				stored.Version,
+			)
+		}
+	})
 }
 
 func testCompany(name string) company.Company {
@@ -195,6 +251,7 @@ func testCompany(name string) company.Company {
 		AmountOfEmployees: 10,
 		Registered:        false,
 		Type:              company.TypeCorporations,
+		Version:           1,
 	}
 }
 

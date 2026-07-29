@@ -72,7 +72,8 @@ func (r *CompanyRepository) GetByID(
 			description,
 			amount_of_employees,
 			registered,
-			type
+			type,
+			version
 		FROM companies
 		WHERE id = $1
 	`
@@ -86,6 +87,7 @@ func (r *CompanyRepository) GetByID(
 		&c.AmountOfEmployees,
 		&c.Registered,
 		&c.Type,
+		&c.Version,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return company.Company{}, company.ErrNotFound
@@ -109,8 +111,10 @@ func (r *CompanyRepository) Update(
 			description = $3,
 			amount_of_employees = $4,
 			registered = $5,
-			type = $6
+			type = $6,
+			version = version + 1
 		WHERE id = $1
+			AND version = $7
 	`
 
 	commandTag, err := r.pool.Exec(
@@ -122,6 +126,7 @@ func (r *CompanyRepository) Update(
 		c.AmountOfEmployees,
 		c.Registered,
 		c.Type,
+		c.Version,
 	)
 	if err != nil {
 		if isCompanyNameUniqueViolation(err) {
@@ -131,11 +136,23 @@ func (r *CompanyRepository) Update(
 		return fmt.Errorf("update company: %w", err)
 	}
 
-	if commandTag.RowsAffected() == 0 {
+	if commandTag.RowsAffected() > 0 {
+		return nil
+	}
+
+	exists, err := r.companyExists(ctx, c.ID)
+	if err != nil {
+		return fmt.Errorf(
+			"check company existence after failed update: %w",
+			err,
+		)
+	}
+
+	if !exists {
 		return company.ErrNotFound
 	}
 
-	return nil
+	return company.ErrConflict
 }
 
 func (r *CompanyRepository) Delete(
@@ -165,4 +182,32 @@ func isCompanyNameUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) &&
 		pgErr.Code == "23505" &&
 		pgErr.ConstraintName == "companies_name_unique"
+}
+
+func (r *CompanyRepository) companyExists(
+	ctx context.Context,
+	id uuid.UUID,
+) (bool, error) {
+	const query = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM companies
+			WHERE id = $1
+		)
+	`
+
+	var exists bool
+
+	if err := r.pool.QueryRow(
+		ctx,
+		query,
+		id,
+	).Scan(&exists); err != nil {
+		return false, fmt.Errorf(
+			"query company existence: %w",
+			err,
+		)
+	}
+
+	return exists, nil
 }

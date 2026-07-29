@@ -18,6 +18,7 @@ type Company struct {
 	AmountOfEmployees int
 	Registered        bool
 	Type              Type
+	Version           int64
 }
 
 func (t Type) Valid() bool {

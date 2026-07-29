@@ -10,6 +10,7 @@ import (
 var (
 	ErrNotFound          = errors.New("company not found")
 	ErrNameAlreadyExists = errors.New("company name already exists")
+	ErrConflict          = errors.New("company was modified concurrently")
 )
 
 type Repository interface {

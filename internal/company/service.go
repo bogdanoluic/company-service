@@ -77,6 +77,7 @@ func (s *Service) Create(
 		AmountOfEmployees: input.AmountOfEmployees,
 		Registered:        input.Registered,
 		Type:              input.Type,
+		Version:           1,
 	}
 
 	if err := validate(c); err != nil {
@@ -141,6 +142,8 @@ func (s *Service) Patch(
 	if err := s.repository.Update(ctx, c); err != nil {
 		return Company{}, err
 	}
+
+	c.Version++
 
 	return c, nil
 }
