@@ -16,19 +16,11 @@ const (
 	defaultServerIdleTimeout  = 60 * time.Second
 
 	defaultLogLevel = "info"
-
-	defaultDatabaseHost           = "localhost"
-	defaultDatabasePort           = 5432
-	defaultDatabaseUser           = "company_service"
-	defaultDatabaseName           = "company_service"
-	defaultDatabaseSSLMode        = "disable"
-	defaultDatabaseConnectTimeout = 5 * time.Second
 )
 
 type Config struct {
-	Server   ServerConfig
-	Log      LogConfig
-	Database DatabaseConfig
+	Server ServerConfig
+	Log    LogConfig
 }
 
 type ServerConfig struct {
@@ -41,16 +33,6 @@ type ServerConfig struct {
 
 type LogConfig struct {
 	Level string
-}
-
-type DatabaseConfig struct {
-	Host           string
-	Port           int
-	User           string
-	Password       string
-	Name           string
-	SSLMode        string
-	ConnectTimeout time.Duration
 }
 
 func Load() (Config, error) {
@@ -86,22 +68,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	databasePort, err := intFromEnvironment(
-		"DATABASE_PORT",
-		defaultDatabasePort,
-	)
-	if err != nil {
-		return Config{}, err
-	}
-
-	connectTimeout, err := durationFromEnvironment(
-		"DATABASE_CONNECT_TIMEOUT",
-		defaultDatabaseConnectTimeout,
-	)
-	if err != nil {
-		return Config{}, err
-	}
-
 	cfg := Config{
 		Server: ServerConfig{
 			Host: envOrDefault(
@@ -118,27 +84,6 @@ func Load() (Config, error) {
 				"LOG_LEVEL",
 				defaultLogLevel,
 			),
-		},
-		Database: DatabaseConfig{
-			Host: envOrDefault(
-				"DATABASE_HOST",
-				defaultDatabaseHost,
-			),
-			Port: databasePort,
-			User: envOrDefault(
-				"DATABASE_USER",
-				defaultDatabaseUser,
-			),
-			Password: os.Getenv("DATABASE_PASSWORD"),
-			Name: envOrDefault(
-				"DATABASE_NAME",
-				defaultDatabaseName,
-			),
-			SSLMode: envOrDefault(
-				"DATABASE_SSL_MODE",
-				defaultDatabaseSSLMode,
-			),
-			ConnectTimeout: connectTimeout,
 		},
 	}
 
@@ -175,41 +120,6 @@ func (c Config) Validate() error {
 	default:
 		return errors.New(
 			"log level must be debug, info, warn, or error",
-		)
-	}
-
-	if c.Database.Host == "" {
-		return errors.New("database host is required")
-	}
-
-	if c.Database.Port < 1 || c.Database.Port > 65535 {
-		return errors.New(
-			"database port must be between 1 and 65535",
-		)
-	}
-
-	if c.Database.User == "" {
-		return errors.New("database user is required")
-	}
-
-	if c.Database.Password == "" {
-		return errors.New("database password is required")
-	}
-
-	if c.Database.Name == "" {
-		return errors.New("database name is required")
-	}
-
-	switch c.Database.SSLMode {
-	case "disable", "allow", "prefer",
-		"require", "verify-ca", "verify-full":
-	default:
-		return errors.New("invalid database SSL mode")
-	}
-
-	if c.Database.ConnectTimeout <= 0 {
-		return errors.New(
-			"database connect timeout must be positive",
 		)
 	}
 

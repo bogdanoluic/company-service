@@ -4,10 +4,13 @@ services:
     ports:
       - "8080:8080"
     environment:
-      DATABASE_HOST: postgres
-      DATABASE_USER: "${DATABASE_USER:?DATABASE_USER is required}"
-      DATABASE_PASSWORD: "${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}"
-      DATABASE_NAME: "${DATABASE_NAME:?DATABASE_NAME is required}"
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: "${PGUSER:?PGUSER is required}"
+      PGPASSWORD: "${PGPASSWORD:?PGPASSWORD is required}"
+      PGDATABASE: "${PGDATABASE:?PGDATABASE is required}"
+      PGSSLMODE: "${PGSSLMODE:-disable}"
+      PGCONNECT_TIMEOUT: "${PGCONNECT_TIMEOUT:-5}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -16,9 +19,9 @@ services:
   postgres:
     image: postgres:18-alpine
     environment:
-      POSTGRES_USER: "${DATABASE_USER:?DATABASE_USER is required}"
-      POSTGRES_PASSWORD: "${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}"
-      POSTGRES_DB: "${DATABASE_NAME:?DATABASE_NAME is required}"
+      POSTGRES_USER: "${PGUSER:?PGUSER is required}"
+      POSTGRES_PASSWORD: "${PGPASSWORD:?PGPASSWORD is required}"
+      POSTGRES_DB: "${PGDATABASE:?PGDATABASE is required}"
     ports:
       - "5432:5432"
     volumes:

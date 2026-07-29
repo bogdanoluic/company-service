@@ -13,6 +13,7 @@ import (
 
 	"github.com/bogdanoluic/company-service/internal/api"
 	"github.com/bogdanoluic/company-service/internal/config"
+	"github.com/bogdanoluic/company-service/internal/database"
 	"github.com/bogdanoluic/company-service/internal/logger"
 )
 
@@ -35,6 +36,14 @@ func run() error {
 	}
 
 	slog.SetDefault(appLogger)
+
+	dbPool, err := database.NewPool(context.Background())
+	if err != nil {
+		return fmt.Errorf("connect to PostgreSQL: %w", err)
+	}
+	defer dbPool.Close()
+
+	appLogger.Info("connected to PostgreSQL")
 
 	router := api.NewRouter(appLogger)
 
