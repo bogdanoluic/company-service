@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/bogdanoluic/company-service/internal/api"
+	"github.com/bogdanoluic/company-service/internal/company"
 	"github.com/bogdanoluic/company-service/internal/config"
 	"github.com/bogdanoluic/company-service/internal/database"
 	"github.com/bogdanoluic/company-service/internal/logger"
+	"github.com/bogdanoluic/company-service/internal/storage/postgres"
 )
 
 func main() {
@@ -45,7 +47,11 @@ func run() error {
 
 	appLogger.Info("connected to PostgreSQL")
 
-	router := api.NewRouter(appLogger)
+	companyRepository := postgres.NewCompanyRepository(dbPool)
+	companyService := company.NewService(companyRepository)
+	companyHandler := api.NewCompanyHandler(companyService, appLogger)
+
+	router := api.NewRouter(appLogger, companyHandler)
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 

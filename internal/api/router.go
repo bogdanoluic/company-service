@@ -7,7 +7,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func NewRouter(logger *slog.Logger) chi.Router {
+func NewRouter(
+	logger *slog.Logger,
+	companyHandler *CompanyHandler,
+) chi.Router {
 	router := chi.NewRouter()
 
 	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -22,6 +25,8 @@ func NewRouter(logger *slog.Logger) chi.Router {
 			)
 		}
 	})
+
+	router.Post("/companies", companyHandler.Create)
 
 	return router
 }
