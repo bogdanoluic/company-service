@@ -21,6 +21,7 @@ const (
 type Config struct {
 	Server ServerConfig
 	Log    LogConfig
+	Auth   AuthConfig
 }
 
 type ServerConfig struct {
@@ -33,6 +34,10 @@ type ServerConfig struct {
 
 type LogConfig struct {
 	Level string
+}
+
+type AuthConfig struct {
+	JWTSecret string
 }
 
 func Load() (Config, error) {
@@ -85,6 +90,9 @@ func Load() (Config, error) {
 				defaultLogLevel,
 			),
 		},
+		Auth: AuthConfig{
+			JWTSecret: os.Getenv("JWT_SECRET"),
+		},
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -120,6 +128,12 @@ func (c Config) Validate() error {
 	default:
 		return errors.New(
 			"log level must be debug, info, warn, or error",
+		)
+	}
+
+	if len(c.Auth.JWTSecret) < 32 {
+		return errors.New(
+			"JWT_SECRET must contain at least 32 characters",
 		)
 	}
 

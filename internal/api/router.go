@@ -10,6 +10,7 @@ import (
 func NewRouter(
 	logger *slog.Logger,
 	companyHandler *CompanyHandler,
+	authMiddleware *AuthMiddleware,
 ) chi.Router {
 	router := chi.NewRouter()
 
@@ -26,10 +27,15 @@ func NewRouter(
 		}
 	})
 
-	router.Post("/companies", companyHandler.Create)
 	router.Get("/companies/{id}", companyHandler.GetByID)
-	router.Patch("/companies/{id}", companyHandler.Patch)
-	router.Delete("/companies/{id}", companyHandler.Delete)
+
+	router.Group(func(router chi.Router) {
+		router.Use(authMiddleware.Authenticate)
+
+		router.Post("/companies", companyHandler.Create)
+		router.Patch("/companies/{id}", companyHandler.Patch)
+		router.Delete("/companies/{id}", companyHandler.Delete)
+	})
 
 	return router
 }

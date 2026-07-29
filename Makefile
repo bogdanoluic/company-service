@@ -48,3 +48,8 @@ clean:
 
 test-integration:
 	go test -tags=integration ./internal/storage/postgres -count=1
+
+token:
+	@go run ./cmd/token \
+		-subject="$(or $(subject),development-user)" \
+		-ttl="$(or $(ttl),1h)"

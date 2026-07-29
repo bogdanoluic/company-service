@@ -51,7 +51,11 @@ func run() error {
 	companyService := company.NewService(companyRepository)
 	companyHandler := api.NewCompanyHandler(companyService, appLogger)
 
-	router := api.NewRouter(appLogger, companyHandler)
+	authMiddleware := api.NewAuthMiddleware(
+		cfg.Auth.JWTSecret,
+	)
+
+	router := api.NewRouter(appLogger, companyHandler, authMiddleware)
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 

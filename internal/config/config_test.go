@@ -19,8 +19,10 @@ var configurationEnvironmentVariables = []string{
 func TestLoadUsesDefaults(t *testing.T) {
 	clearConfigurationEnvironment(t)
 
-	// The password intentionally has no default and must always be provided.
+	// The password and secret intentionally have no default and must always be provided.
 	t.Setenv("DATABASE_PASSWORD", "test-password")
+
+	t.Setenv("JWT_SECRET", "01234567890123456789012345678901")
 
 	cfg, err := Load()
 	if err != nil {
@@ -38,6 +40,9 @@ func TestLoadUsesDefaults(t *testing.T) {
 		Log: LogConfig{
 			Level: defaultLogLevel,
 		},
+		Auth: AuthConfig{
+			JWTSecret: "01234567890123456789012345678901",
+		},
 	}
 
 	if cfg != want {
@@ -54,6 +59,7 @@ func TestLoadUsesEnvironmentValues(t *testing.T) {
 	t.Setenv("SERVER_WRITE_TIMEOUT", "15s")
 	t.Setenv("SERVER_IDLE_TIMEOUT", "90s")
 	t.Setenv("LOG_LEVEL", "debug")
+	t.Setenv("JWT_SECRET", "01234567890123456789012345678901")
 
 	cfg, err := Load()
 	if err != nil {
@@ -70,6 +76,9 @@ func TestLoadUsesEnvironmentValues(t *testing.T) {
 		},
 		Log: LogConfig{
 			Level: "debug",
+		},
+		Auth: AuthConfig{
+			JWTSecret: "01234567890123456789012345678901",
 		},
 	}
 
