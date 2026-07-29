@@ -22,6 +22,8 @@ func NewCompanyRepository(pool *pgxpool.Pool) *CompanyRepository {
 	}
 }
 
+var _ company.Repository = (*CompanyRepository)(nil)
+
 func (r *CompanyRepository) Create(
 	ctx context.Context,
 	c company.Company,
