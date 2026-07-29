@@ -47,6 +47,11 @@ func run() error {
 
 	appLogger.Info("connected to PostgreSQL")
 
+	healthHandler := api.NewHealthHandler(
+		dbPool,
+		appLogger,
+	)
+
 	companyRepository := postgres.NewCompanyRepository(dbPool)
 	companyService := company.NewService(companyRepository)
 	companyHandler := api.NewCompanyHandler(companyService, appLogger)
@@ -55,7 +60,7 @@ func run() error {
 		cfg.Auth.JWTSecret,
 	)
 
-	router := api.NewRouter(appLogger, companyHandler, authMiddleware)
+	router := api.NewRouter(appLogger, healthHandler, companyHandler, authMiddleware)
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 

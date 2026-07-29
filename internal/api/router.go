@@ -2,30 +2,26 @@ package api
 
 import (
 	"log/slog"
-	"net/http"
 
+	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
 func NewRouter(
 	logger *slog.Logger,
+	healthHandler *HealthHandler,
 	companyHandler *CompanyHandler,
 	authMiddleware *AuthMiddleware,
 ) chi.Router {
 	router := chi.NewRouter()
 
-	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		logger.Debug("health check requested")
+	router.Use(middleware.RequestID)
+	router.Use(middleware.RealIP)
+	router.Use(middleware.Recoverer)
 
-		w.WriteHeader(http.StatusOK)
-
-		if _, err := w.Write([]byte("OK")); err != nil {
-			logger.Error(
-				"write health response",
-				"error", err,
-			)
-		}
-	})
+	router.Get("/health", healthHandler.Live)
+	router.Get("/health/live", healthHandler.Live)
+	router.Get("/health/ready", healthHandler.Ready)
 
 	router.Get("/companies/{id}", companyHandler.GetByID)
 
