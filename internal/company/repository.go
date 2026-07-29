@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/bogdanoluic/company-service/internal/outbox"
 	"github.com/google/uuid"
 )
 
@@ -14,8 +15,26 @@ var (
 )
 
 type Repository interface {
-	Create(ctx context.Context, company Company) error
-	GetByID(ctx context.Context, id uuid.UUID) (Company, error)
-	Update(ctx context.Context, company Company) error
-	Delete(ctx context.Context, id uuid.UUID) error
+	Create(
+		ctx context.Context,
+		company Company,
+		event outbox.Event,
+	) error
+
+	GetByID(
+		ctx context.Context,
+		id uuid.UUID,
+	) (Company, error)
+
+	Update(
+		ctx context.Context,
+		company Company,
+		event outbox.Event,
+	) error
+
+	Delete(
+		ctx context.Context,
+		id uuid.UUID,
+		event outbox.Event,
+	) error
 }

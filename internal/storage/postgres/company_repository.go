@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/bogdanoluic/company-service/internal/company"
+	"github.com/bogdanoluic/company-service/internal/outbox"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -27,38 +28,58 @@ var _ company.Repository = (*CompanyRepository)(nil)
 func (r *CompanyRepository) Create(
 	ctx context.Context,
 	c company.Company,
+	event outbox.Event,
 ) error {
-	const query = `
-		INSERT INTO companies (
-			id,
-			name,
-			description,
-			amount_of_employees,
-			registered,
-			type
-		)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`
-
-	_, err := r.pool.Exec(
+	return withTransaction(
 		ctx,
-		query,
-		c.ID,
-		c.Name,
-		c.Description,
-		c.AmountOfEmployees,
-		c.Registered,
-		c.Type,
+		r.pool,
+		func(tx pgx.Tx) error {
+			const query = `
+				INSERT INTO companies (
+					id,
+					name,
+					description,
+					amount_of_employees,
+					registered,
+					type,
+					version
+				)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`
+
+			_, err := tx.Exec(
+				ctx,
+				query,
+				c.ID,
+				c.Name,
+				c.Description,
+				c.AmountOfEmployees,
+				c.Registered,
+				c.Type,
+				c.Version,
+			)
+			if err != nil {
+				if isCompanyNameUniqueViolation(err) {
+					return company.ErrNameAlreadyExists
+				}
+
+				return fmt.Errorf(
+					"insert company: %w",
+					err,
+				)
+			}
+
+			if err := insertOutboxEvent(
+				ctx,
+				tx,
+				event,
+			); err != nil {
+				return err
+			}
+
+			return nil
+		},
 	)
-	if err != nil {
-		if isCompanyNameUniqueViolation(err) {
-			return company.ErrNameAlreadyExists
-		}
-
-		return fmt.Errorf("insert company: %w", err)
-	}
-
-	return nil
 }
 
 func (r *CompanyRepository) GetByID(
@@ -103,8 +124,13 @@ func (r *CompanyRepository) GetByID(
 func (r *CompanyRepository) Update(
 	ctx context.Context,
 	c company.Company,
+	event outbox.Event,
 ) error {
-	const query = `
+	return withTransaction(
+		ctx,
+		r.pool,
+		func(tx pgx.Tx) error {
+			const query = `
 		UPDATE companies
 		SET
 			name = $2,
@@ -117,63 +143,88 @@ func (r *CompanyRepository) Update(
 			AND version = $7
 	`
 
-	commandTag, err := r.pool.Exec(
-		ctx,
-		query,
-		c.ID,
-		c.Name,
-		c.Description,
-		c.AmountOfEmployees,
-		c.Registered,
-		c.Type,
-		c.Version,
-	)
-	if err != nil {
-		if isCompanyNameUniqueViolation(err) {
-			return company.ErrNameAlreadyExists
-		}
+			commandTag, err := r.pool.Exec(
+				ctx,
+				query,
+				c.ID,
+				c.Name,
+				c.Description,
+				c.AmountOfEmployees,
+				c.Registered,
+				c.Type,
+				c.Version,
+			)
+			if err != nil {
+				if isCompanyNameUniqueViolation(err) {
+					return company.ErrNameAlreadyExists
+				}
 
-		return fmt.Errorf("update company: %w", err)
-	}
+				return fmt.Errorf("update company: %w", err)
+			}
 
-	if commandTag.RowsAffected() > 0 {
-		return nil
-	}
+			if commandTag.RowsAffected() == 0 {
 
-	exists, err := r.companyExists(ctx, c.ID)
-	if err != nil {
-		return fmt.Errorf(
-			"check company existence after failed update: %w",
-			err,
-		)
-	}
+				exists, err := r.companyExists(ctx, c.ID)
+				if err != nil {
+					return fmt.Errorf(
+						"check company existence after failed update: %w",
+						err,
+					)
+				}
 
-	if !exists {
-		return company.ErrNotFound
-	}
+				if !exists {
+					return company.ErrNotFound
+				}
 
-	return company.ErrConflict
+				return company.ErrConflict
+			}
+
+			if err := insertOutboxEvent(
+				ctx,
+				tx,
+				event,
+			); err != nil {
+				return err
+			}
+
+			return nil
+		})
 }
 
 func (r *CompanyRepository) Delete(
 	ctx context.Context,
 	id uuid.UUID,
+	event outbox.Event,
 ) error {
-	const query = `
+
+	return withTransaction(
+		ctx,
+		r.pool,
+		func(tx pgx.Tx) error {
+			const query = `
 		DELETE FROM companies
 		WHERE id = $1
 	`
 
-	commandTag, err := r.pool.Exec(ctx, query, id)
-	if err != nil {
-		return fmt.Errorf("delete company: %w", err)
-	}
+			commandTag, err := r.pool.Exec(ctx, query, id)
+			if err != nil {
+				return fmt.Errorf("delete company: %w", err)
+			}
 
-	if commandTag.RowsAffected() == 0 {
-		return company.ErrNotFound
-	}
+			if commandTag.RowsAffected() == 0 {
+				return company.ErrNotFound
+			}
 
-	return nil
+			if err := insertOutboxEvent(
+				ctx,
+				tx,
+				event,
+			); err != nil {
+				return err
+			}
+
+			return nil
+		})
 }
 
 func isCompanyNameUniqueViolation(err error) bool {

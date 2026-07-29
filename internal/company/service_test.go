@@ -7,14 +7,33 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bogdanoluic/company-service/internal/outbox"
 	"github.com/google/uuid"
 )
 
 type fakeRepository struct {
-	createFn  func(context.Context, Company) error
-	getByIDFn func(context.Context, uuid.UUID) (Company, error)
-	updateFn  func(context.Context, Company) error
-	deleteFn  func(context.Context, uuid.UUID) error
+	createFn func(
+		context.Context,
+		Company,
+		outbox.Event,
+	) error
+
+	getByIDFn func(
+		context.Context,
+		uuid.UUID,
+	) (Company, error)
+
+	updateFn func(
+		context.Context,
+		Company,
+		outbox.Event,
+	) error
+
+	deleteFn func(
+		context.Context,
+		uuid.UUID,
+		outbox.Event,
+	) error
 }
 
 var _ Repository = (*fakeRepository)(nil)
@@ -22,12 +41,13 @@ var _ Repository = (*fakeRepository)(nil)
 func (r *fakeRepository) Create(
 	ctx context.Context,
 	c Company,
+	event outbox.Event,
 ) error {
 	if r.createFn == nil {
 		panic("unexpected call to Create")
 	}
 
-	return r.createFn(ctx, c)
+	return r.createFn(ctx, c, event)
 }
 
 func (r *fakeRepository) GetByID(
@@ -44,23 +64,25 @@ func (r *fakeRepository) GetByID(
 func (r *fakeRepository) Update(
 	ctx context.Context,
 	c Company,
+	event outbox.Event,
 ) error {
 	if r.updateFn == nil {
 		panic("unexpected call to Update")
 	}
 
-	return r.updateFn(ctx, c)
+	return r.updateFn(ctx, c, event)
 }
 
 func (r *fakeRepository) Delete(
 	ctx context.Context,
 	id uuid.UUID,
+	event outbox.Event,
 ) error {
 	if r.deleteFn == nil {
 		panic("unexpected call to Delete")
 	}
 
-	return r.deleteFn(ctx, id)
+	return r.deleteFn(ctx, id, event)
 }
 
 func TestServiceCreate(t *testing.T) {
@@ -87,6 +109,7 @@ func TestServiceCreate(t *testing.T) {
 			createFn: func(
 				_ context.Context,
 				c Company,
+				_ outbox.Event,
 			) error {
 				repositoryInput = c
 				return nil
@@ -132,6 +155,7 @@ func TestServiceCreate(t *testing.T) {
 			createFn: func(
 				context.Context,
 				Company,
+				outbox.Event,
 			) error {
 				return repositoryError
 			},
@@ -222,6 +246,7 @@ func TestServiceCreateRejectsInvalidInput(t *testing.T) {
 				createFn: func(
 					context.Context,
 					Company,
+					outbox.Event,
 				) error {
 					repositoryCalled = true
 					return nil
@@ -332,6 +357,7 @@ func TestServicePatch(t *testing.T) {
 			updateFn: func(
 				_ context.Context,
 				c Company,
+				_ outbox.Event,
 			) error {
 				repositoryUpdate = c
 				return nil
@@ -428,6 +454,7 @@ func TestServicePatch(t *testing.T) {
 			updateFn: func(
 				context.Context,
 				Company,
+				outbox.Event,
 			) error {
 				updateCalled = true
 				return nil
@@ -520,6 +547,7 @@ func TestServicePatch(t *testing.T) {
 			updateFn: func(
 				context.Context,
 				Company,
+				outbox.Event,
 			) error {
 				return repositoryError
 			},
@@ -556,6 +584,7 @@ func TestServiceDelete(t *testing.T) {
 		deleteFn: func(
 			_ context.Context,
 			gotID uuid.UUID,
+			_ outbox.Event,
 		) error {
 			if gotID != id {
 				t.Errorf("Delete() ID = %s, want %s", gotID, id)
@@ -579,7 +608,7 @@ func TestServiceDelete(t *testing.T) {
 
 func TestValidateCountsUnicodeCharacters(t *testing.T) {
 	repository := &fakeRepository{
-		createFn: func(context.Context, Company) error {
+		createFn: func(context.Context, Company, outbox.Event) error {
 			return nil
 		},
 	}

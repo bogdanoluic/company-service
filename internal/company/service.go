@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -57,12 +58,16 @@ func (p PatchInput) Empty() bool {
 type Service struct {
 	repository Repository
 	newID      func() uuid.UUID
+	newEventID func() uuid.UUID
+	now        func() time.Time
 }
 
 func NewService(repository Repository) *Service {
 	return &Service{
 		repository: repository,
 		newID:      uuid.New,
+		newEventID: uuid.New,
+		now:        time.Now,
 	}
 }
 
@@ -84,7 +89,19 @@ func (s *Service) Create(
 		return Company{}, err
 	}
 
-	if err := s.repository.Create(ctx, c); err != nil {
+	event, err := newCreatedEvent(
+		c,
+		s.newEventID(),
+		s.now(),
+	)
+	if err != nil {
+		return Company{}, fmt.Errorf(
+			"create company event: %w",
+			err,
+		)
+	}
+
+	if err := s.repository.Create(ctx, c, event); err != nil {
 		return Company{}, err
 	}
 
@@ -139,7 +156,19 @@ func (s *Service) Patch(
 		return Company{}, err
 	}
 
-	if err := s.repository.Update(ctx, c); err != nil {
+	event, err := newUpdatedEvent(
+		c,
+		s.newEventID(),
+		s.now(),
+	)
+	if err != nil {
+		return Company{}, fmt.Errorf(
+			"create company update event: %w",
+			err,
+		)
+	}
+
+	if err := s.repository.Update(ctx, c, event); err != nil {
 		return Company{}, err
 	}
 
@@ -152,7 +181,19 @@ func (s *Service) Delete(
 	ctx context.Context,
 	id uuid.UUID,
 ) error {
-	return s.repository.Delete(ctx, id)
+	event, err := newDeletedEvent(
+		id,
+		s.newEventID(),
+		s.now(),
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"create company deletion event: %w",
+			err,
+		)
+	}
+
+	return s.repository.Delete(ctx, id, event)
 }
 
 func validate(c Company) error {
